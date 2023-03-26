@@ -1,0 +1,4 @@
+stl
+matplotlib
+pygame
+PyOpenGL
