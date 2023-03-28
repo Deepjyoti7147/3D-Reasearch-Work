@@ -1,0 +1,2 @@
+#exclude the pycache folder
+exclude = .git, __pycache__, .vscode, .pytest_cache, .mypy_cache, .coverage, .coverage.*

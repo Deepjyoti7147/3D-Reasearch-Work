@@ -3,8 +3,7 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import os
-
-
+import sqlite3
 X = []
 Y = []
 Z = []
@@ -86,8 +85,88 @@ class DCEL:
         self.faces.append(f)
         return f
     
+    def hsort(self, e1, e2):
+        """Sort two half-edges by their origin vertex"""
+        if e1.origin.x < e2.origin.x:
+            return -1
+        elif e1.origin.x > e2.origin.x:
+            return 1
+        elif e1.origin.y < e2.origin.y:
+            return -1
+        elif e1.origin.y > e2.origin.y:
+            return 1
+        elif e1.origin.z < e2.origin.z:
+            return -1
+        elif e1.origin.z > e2.origin.z:
+            return 1
+        else:
+            return 0
+        
+    def check_edge(self, v1, v2):
+        """Check if an edge exists between two vertices"""
+        for e in self.edges:
+            if e.origin == v1 and e.twin.origin == v2:
+                return e
+        return None
+    
+    def aread(self, v1, v2, v3):
+        """Calculate the area of the triangle formed by three vertices"""
+        return 0.5 * np.linalg.norm(np.cross(v2 - v1, v3 - v1))
+    
+    def build(self):
+        """Build the DCEL data structure"""
+        # Add edges
+        for i in range(len(edges)):
+            e = self.add_edge()
+            e.origin = self.vertices[edges[i][0]]
+            e.twin = self.add_edge()
+            e.twin.origin = self.vertices[edges[i][1]]
+            e.twin.twin = e
+            e.twin.face = self.faces[0]
+            e.face = self.faces[0]
+        
+        # Sort the edges
+        self.edges.sort(key=lambda e: e.origin)
+        
+        # Add next and prev pointers
+        for i in range(len(self.edges)):
+            self.edges[i].next = self.edges[(i + 1) % len(self.edges)]
+            self.edges[i].prev = self.edges[(i - 1) % len(self.edges)]
+        
+        # Add incident edge pointers
+        for v in self.vertices:
+            v.incident_edge = self.edges[0]
+            for e in self.edges:
+                if e.origin == v:
+                    v.incident_edge = e
+                    break
+        
+        # Add twin pointers
+        for e in self.edges:
+            if e.twin is None:
+                e.twin = self.check_edge(e.twin.origin, e.origin)
+                e.twin.twin = e
+        
+        # Add face pointers
+        for e in self.edges:
+            if e.face is None:
+                e.face = self.add_face()
+                e.face.edge = e
+                e.twin.face = e.face
+        
+        # Add next and prev pointers for the faces
+        for f in self.faces:
+            e = f.edge
+            while True:
+                e.next = e.twin.next
+                e.next.prev = e
+                e = e.next
+                if e == f.edge:
+                    break
 
 dcel = DCEL()
+# use the build function to build the DCEL data structure
+# dcel.build()
 
 # Add vertices
 for i in range(len(vertices)):
@@ -107,4 +186,33 @@ ax = fig.add_subplot(111, projection='3d')
 ax.plot_trisurf(verts[:, 0], verts[:,1], faces, verts[:, 2], cmap='Spectral', lw=1)
 plt.show()
 
+
+# Store the vertices, edge and face in a SQLite database
+conn = sqlite3.connect('mesh.db')
+c = conn.cursor()
+
+# Create table
+c.execute('''CREATE TABLE vertices
+                (id integer, x real, y real, z real)''')
+c.execute('''CREATE TABLE edges
+                (id integer, origin integer, twin integer, next integer, prev integer, face integer)''')    
+c.execute('''CREATE TABLE faces
+                (id integer, edge integer)''')  
+
+# Insert a row of data
+for i in range(len(vertices)):
+    c.execute("INSERT INTO vertices VALUES (?, ?, ?, ?)", (i, vertices[i][0], vertices[i][1], vertices[i][2]))
+for i in range(len(edges)):
+    c.execute("INSERT INTO edges VALUES (?, ?, ?, ?, ?, ?)", (i, edges[i][0], edges[i][1], 0, 0, 0))
+for i in range(len(face_indices)):
+    c.execute("INSERT INTO faces VALUES (?, ?)", (i, 0))
+
+# Save (commit) the changes
+conn.commit()
+
+# We can also close the connection if we are done with it.
+# Just be sure any changes have been committed or they will be lost.
+
+# Close the connection
+conn.close()
 
